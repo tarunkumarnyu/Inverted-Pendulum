@@ -9,9 +9,10 @@ A real-time inverted pendulum balance controller running on an Arduino Mega 2560
 
 ## Demo
 
-<!-- Drag-and-drop pendulum_demo.mp4 here in the GitHub web editor to embed -->
 
-https://github.com/tarunkumarnyu/Inverted-Pendulum/raw/main/assets/pendulum_demo.mp4
+
+https://github.com/user-attachments/assets/bd4a8e72-5cd6-4e73-9694-4a535366f85d
+
 
 ## Architecture
 
