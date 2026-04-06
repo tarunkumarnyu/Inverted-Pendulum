@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <path d="M0,0 L9,3.5 L0,7" fill="none" stroke="#333" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="560" fill="#fff"/>
+
+  <!-- ══════════ SENSING ══════════ -->
+  <text x="32" y="32" fill="#333" font-size="13" font-weight="600">Sensing · quadrature encoders</text>
+
+  <rect x="40" y="50" width="380" height="74" rx="8" fill="#EBF5FF" stroke="#4A90D9" stroke-width="1"/>
+  <text x="230" y="76" text-anchor="middle" fill="#1A5694" font-size="13" font-weight="600">E38S6 pendulum encoder</text>
+  <text x="230" y="94" text-anchor="middle" fill="#4A78A5" font-size="10">600 PPR · 2400 counts/rev (quadrature)</text>
+  <text x="230" y="110" text-anchor="middle" fill="#4A78A5" font-size="10">pins 18/19 (INT5/INT4) · INPUT_PULLUP</text>
+
+  <rect x="480" y="50" width="380" height="74" rx="8" fill="#EBF5FF" stroke="#4A90D9" stroke-width="1"/>
+  <text x="670" y="76" text-anchor="middle" fill="#1A5694" font-size="13" font-weight="600">CQR37D motor encoder</text>
+  <text x="670" y="94" text-anchor="middle" fill="#4A78A5" font-size="10">64 CPR × 6.25:1 gear · 1600 counts/rev</text>
+  <text x="670" y="110" text-anchor="middle" fill="#4A78A5" font-size="10">pins 2/3 (INT0/INT1) · belt → cart mm</text>
+
+  <line x1="230" y1="124" x2="230" y2="170" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="670" y1="124" x2="670" y2="170" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- ══════════ ESTIMATION + CONTROL ══════════ -->
+  <text x="32" y="158" fill="#333" font-size="13" font-weight="600">200 Hz control loop · Arduino Mega 2560</text>
+
+  <rect x="24" y="170" width="852" height="244" rx="10" fill="none" stroke="#bbb" stroke-width="0.8" stroke-dasharray="6,3"/>
+
+  <!-- State estimator -->
+  <rect x="40" y="186" width="820" height="68" rx="8" fill="#E6F7F0" stroke="#1D9E75" stroke-width="1"/>
+  <text x="450" y="212" text-anchor="middle" fill="#085041" font-size="13" font-weight="600">State estimator</text>
+  <text x="450" y="230" text-anchor="middle" fill="#3A8A6E" font-size="10">θ = counts × 2π / 2400    ·    cart_pos = −counts × 2π·r / 1600</text>
+  <text x="450" y="246" text-anchor="middle" fill="#3A8A6E" font-size="10">θ̇ and cart_vel via 10-sample sliding window (50 ms)  →  10× less noise than single-step Δ/Δt</text>
+
+  <line x1="220" y1="254" x2="220" y2="288" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="680" y1="254" x2="680" y2="288" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Angle correction -->
+  <rect x="40" y="290" width="380" height="84" rx="8" fill="#FFF0E8" stroke="#D85A30" stroke-width="1"/>
+  <text x="230" y="316" text-anchor="middle" fill="#712B13" font-size="13" font-weight="600">Angle correction (LQR)</text>
+  <text x="230" y="334" text-anchor="middle" fill="#A86040" font-size="11" font-family="monospace">u_a = −(K1·θ + K2·θ̇)</text>
+  <text x="230" y="352" text-anchor="middle" fill="#A86040" font-size="10">dead-zone feed-forward: |u_a|&gt;1 → +sign·MIN_PWM</text>
+  <text x="230" y="366" text-anchor="middle" fill="#A86040" font-size="10">K1=800   K2=30</text>
+
+  <!-- Cart centering -->
+  <rect x="480" y="290" width="380" height="84" rx="8" fill="#FFF0E8" stroke="#D85A30" stroke-width="1"/>
+  <text x="670" y="316" text-anchor="middle" fill="#712B13" font-size="13" font-weight="600">Cart centering (PI on position)</text>
+  <text x="670" y="334" text-anchor="middle" fill="#A86040" font-size="11" font-family="monospace">u_c = −(K3·x + K4·ẋ + KI·∫x)</text>
+  <text x="670" y="352" text-anchor="middle" fill="#A86040" font-size="10">linear bias only — no dead-zone boost</text>
+  <text x="670" y="366" text-anchor="middle" fill="#A86040" font-size="10">K3=0.8   K4=0.3   KI=0.5</text>
+
+  <!-- Sum -->
+  <line x1="230" y1="374" x2="430" y2="394" stroke="#333" stroke-width="1.2"/>
+  <line x1="670" y1="374" x2="470" y2="394" stroke="#333" stroke-width="1.2"/>
+  <circle cx="450" cy="394" r="10" fill="#fff" stroke="#333" stroke-width="1.2"/>
+  <text x="450" y="398" text-anchor="middle" fill="#333" font-size="11" font-weight="600">+</text>
+  <line x1="450" y1="404" x2="450" y2="440" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="462" y="424" fill="#666" font-size="10" font-family="monospace">u, clamped ±220</text>
+
+  <!-- ══════════ ACTUATION ══════════ -->
+  <text x="32" y="442" fill="#333" font-size="13" font-weight="600">Actuation</text>
+
+  <rect x="40" y="450" width="380" height="68" rx="8" fill="#F3EEFE" stroke="#8B72BE" stroke-width="1"/>
+  <text x="230" y="476" text-anchor="middle" fill="#4E3D80" font-size="13" font-weight="600">L298N H-bridge</text>
+  <text x="230" y="494" text-anchor="middle" fill="#7A6BA0" font-size="10">IN1/IN2 direction · ENA = |u| (PWM)</text>
+  <text x="230" y="510" text-anchor="middle" fill="#7A6BA0" font-size="10">deadband &lt;5  ·  boost-to-MIN_PWM (=35)</text>
+
+  <rect x="480" y="450" width="380" height="68" rx="8" fill="#F5F5F2" stroke="#888" stroke-width="1"/>
+  <text x="670" y="476" text-anchor="middle" fill="#333" font-size="13" font-weight="600">CQR37D motor → GT2 belt → cart</text>
+  <text x="670" y="494" text-anchor="middle" fill="#777" font-size="10">12 V · 6.25:1 gear · 20-tooth pulley (r ≈ 6.37 mm)</text>
+  <text x="670" y="510" text-anchor="middle" fill="#777" font-size="10">266 g cart on 30 cm rail</text>
+
+  <line x1="420" y1="484" x2="476" y2="484" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- feedback loop -->
+  <path d="M860,484 L884,484 L884,87 L860,87" fill="none" stroke="#aaa" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="888" y="290" fill="#999" font-size="10" transform="rotate(90 888 290)">physical feedback</text>
+
+  <!-- ══════════ LEGEND ══════════ -->
+  <g transform="translate(32,536)">
+    <rect x="0" y="0" width="14" height="14" rx="3" fill="#EBF5FF" stroke="#4A90D9" stroke-width="0.8"/>
+    <text x="20" y="11" fill="#666" font-size="10">Sensor</text>
+    <rect x="80" y="0" width="14" height="14" rx="3" fill="#E6F7F0" stroke="#1D9E75" stroke-width="0.8"/>
+    <text x="100" y="11" fill="#666" font-size="10">Estimator</text>
+    <rect x="180" y="0" width="14" height="14" rx="3" fill="#FFF0E8" stroke="#D85A30" stroke-width="0.8"/>
+    <text x="200" y="11" fill="#666" font-size="10">Control law</text>
+    <rect x="280" y="0" width="14" height="14" rx="3" fill="#F3EEFE" stroke="#8B72BE" stroke-width="0.8"/>
+    <text x="300" y="11" fill="#666" font-size="10">Driver</text>
+    <rect x="350" y="0" width="14" height="14" rx="3" fill="#F5F5F2" stroke="#888" stroke-width="0.8"/>
+    <text x="370" y="11" fill="#666" font-size="10">Plant</text>
+  </g>
+</svg>

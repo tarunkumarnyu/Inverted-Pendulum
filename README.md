@@ -1,92 +1,117 @@
 # Inverted Pendulum — LQR Balance Controller
 
-A real-time inverted pendulum balance controller running on an Arduino Mega 2560. The system uses LQR (Linear Quadratic Regulator) state feedback with integral cart centering to keep a pendulum balanced upright on a linear rail.
+[![Platform](https://img.shields.io/badge/Platform-Arduino%20Mega%202560-00979D)](https://store.arduino.cc/products/arduino-mega-2560-rev3)
+[![Build](https://img.shields.io/badge/Build-PlatformIO-orange)](https://platformio.org/)
+[![Control](https://img.shields.io/badge/Control-LQR%20%40%20200%20Hz-D85A30)](#control-architecture)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
+
+A real-time inverted pendulum balance controller running on an Arduino Mega 2560. The system uses LQR state feedback for angle stabilization combined with PI cart centering, running at 200 Hz with quadrature encoder feedback. The angle controller keeps the pendulum within ±2° of vertical.
+
+## Demo
+
+<!-- Drag-and-drop pendulum_demo.mp4 here in the GitHub web editor to embed -->
+
+https://github.com/tarunkumarnyu/Inverted-Pendulum/raw/main/assets/pendulum_demo.mp4
+
+## Architecture
+
+![Control architecture](architecture.png)
+
+Two encoders feed a sliding-window state estimator. The controller splits into an LQR angle correction (with dead-zone feed-forward to overcome motor static friction) and a PI cart centering term (linear bias only, so it cannot overpower the angle correction). The sum is clamped to ±220 PWM and sent through an L298N H-bridge to a geared DC motor driving the cart over a GT2 timing belt.
 
 ## Hardware
 
 | Component | Model | Notes |
 |---|---|---|
-| Microcontroller | Arduino Mega 2560 | 5 interrupt pins for dual encoders |
-| DC Motor | CQR37D (12V, 6.25:1 gear ratio) | Built-in Hall-effect encoder, 64 CPR |
-| Motor Driver | L298N Dual H-Bridge | PWM speed control, min ~35 PWM to move |
-| Pendulum Encoder | E38S6 (600 PPR) | NPN open-collector, needs INPUT_PULLUP |
-| Drive System | GT2 timing belt + pulleys | Converts rotation to linear cart motion |
-| Rail Length | 30 cm | ~±30mm effective cart travel |
+| Microcontroller | Arduino Mega 2560 | 4 hardware interrupt pins for dual quadrature encoders |
+| DC motor | CQR37D (12 V, 6.25:1 gear) | Built-in Hall encoder, 64 CPR → 1600 counts/rev quadrature |
+| Motor driver | L298N dual H-bridge | PWM speed control, ~35 PWM minimum to overcome friction |
+| Pendulum encoder | E38S6 (600 PPR) | NPN open-collector — needs `INPUT_PULLUP` |
+| Drive | GT2 timing belt + 20-tooth pulley | r ≈ 6.37 mm, converts rotation to linear cart motion |
+| Rail | 30 cm linear | ±120 mm software travel limit |
 
-## Wiring
+### Wiring
 
 ```
 CQR37D Motor Encoder        Arduino Mega
-  Yellow (A) ──────────────── Pin 2  (INT0)
-  White  (B) ──────────────── Pin 3  (INT1)
-  Blue   (VCC) ────────────── 3.3V
-  Gray   (GND) ────────────── GND
+  Yellow (A) ─────────────── Pin 2  (INT0)
+  White  (B) ─────────────── Pin 3  (INT1)
+  Blue   (VCC) ───────────── 3.3 V
+  Gray   (GND) ───────────── GND
 
-E38S6 Pendulum Encoder       Arduino Mega
-  Green  (A) ──────────────── Pin 18 (INT5)
-  White  (B) ──────────────── Pin 19 (INT4)
-  VCC ─────────────────────── 5V
-  GND ─────────────────────── GND
+E38S6 Pendulum Encoder      Arduino Mega
+  Green  (A) ─────────────── Pin 18 (INT5)
+  White  (B) ─────────────── Pin 19 (INT4)
+  VCC ────────────────────── 5 V
+  GND ────────────────────── GND
 
-L298N Motor Driver            Arduino Mega
-  IN1 ─────────────────────── Pin 8
-  IN2 ─────────────────────── Pin 9
-  ENA ─────────────────────── Pin 10 (PWM)
+L298N Motor Driver          Arduino Mega
+  IN1 ────────────────────── Pin 8
+  IN2 ────────────────────── Pin 9
+  ENA ────────────────────── Pin 10 (PWM)
 ```
+
+### Physical parameters
+
+- Cart mass: 266 g
+- Rod mass: 16 g · length 30.4 cm (COM at 15.2 cm)
+- Linearized natural frequency at the upright equilibrium: ωₙ ≈ 7.36 rad/s
+- Motor encoder: 1600 counts/rev (×4 quadrature)
+- Pendulum encoder: 2400 counts/rev (×4 quadrature)
 
 ## Control Architecture
 
-The controller uses a split control structure running at **200 Hz**:
+The control loop runs at **200 Hz** (5 ms period) and is structured as two additive terms.
 
-**Angle correction** — LQR state feedback on pendulum angle and angular velocity, with dead-zone feed-forward compensation to overcome motor static friction:
+**State estimator.** Encoder counts are converted to angle (rad) and cart position (mm). Velocities are estimated by comparing the current sample to the value 10 cycles (50 ms) ago — this gives roughly 10× better resolution than a single-step finite difference and avoids amplifying encoder quantization noise.
+
+**Angle correction (LQR).** State feedback on pendulum angle and angular velocity, with a dead-zone feed-forward term that adds `MIN_PWM` whenever the desired command is non-trivial. This compensates for the L298N + motor static friction (~35 PWM dead band) so the controller can react to small angle errors.
 
 ```
 u_angle = -(K1 * theta + K2 * theta_dot)
 if |u_angle| > 1:  u_angle += sign(u_angle) * MIN_PWM
 ```
 
-**Cart centering** — Proportional + Integral control on cart position, applied as a linear bias (no dead-zone boost) to avoid overpowering the angle correction:
+**Cart centering (PI on position).** Proportional + derivative on cart position and velocity, plus an integral term that eliminates steady-state drift caused by belt slop and asymmetric friction. Crucially, no dead-zone boost is applied here — the cart-centering term is meant to be a *gentle bias* on top of angle correction, not a dominant input.
 
 ```
 u_cart = -(K3 * cart_pos + K4 * cart_vel + KI * cart_integral)
 ```
 
-**Velocity estimation** uses a 10-sample sliding window (50ms) for 10x better resolution compared to single-step finite difference.
+**Output.** `u = u_angle + u_cart`, clamped to ±`MAX_BALANCE_PWM` (220) to prevent violent recoveries that snap the rod or rip the cart off the rail.
 
-### Current Gains
+### Current gains
 
-| Gain | Value | Description |
+| Gain | Value | Maps |
 |---|---|---|
-| K1 | 800 | Angle (rad) → PWM |
-| K2 | 30 | Angular velocity (rad/s) → PWM |
-| K3 | 0.8 | Cart position (mm) → PWM |
-| K4 | 0.3 | Cart velocity (mm/s) → PWM |
-| KI | 0.5 | Cart position integral → PWM |
+| K1 | 800 | angle (rad) → PWM |
+| K2 | 30 | angular velocity (rad/s) → PWM |
+| K3 | 0.8 | cart position (mm) → PWM |
+| K4 | 0.3 | cart velocity (mm/s) → PWM |
+| KI | 0.5 | cart position integral → PWM |
 
-## Physical Parameters
+The integral is clamped to ±500 to prevent windup if the cart hits a rail.
 
-- Cart mass: 266 g
-- Rod mass: 16 g
-- Rod length: 30.4 cm (COM at 15.2 cm)
-- Motor encoder: 1600 counts/rev (with quadrature)
-- Pendulum encoder: 2400 counts/rev (with quadrature)
-- Pulley radius: 6.37 mm (GT2 20-tooth)
+### Safety
 
-## Serial Commands
+- **Fall detection.** If `|theta| > 30°` (`BALANCE_EXIT_ANGLE`), the controller drops to `STATE_ESTOP` and brakes.
+- **Cart limit.** If `|cart_pos| > 120 mm`, same — the cart is about to hit the end of the rail.
+- **PWM clamp.** Output is hard-limited to ±220 PWM.
+
+## Serial Interface
 
 | Key | Action |
 |---|---|
 | `s` | Start balancing (hold pendulum upright first) |
 | `x` | Emergency stop |
 | `r` | Reset encoders to zero |
-| `d` | Toggle diagnostic mode (raw encoder counts) |
-| `t` | Tilt test (verify motor direction) |
+| `d` | Toggle diagnostic mode (raw encoder counts + pin states) |
+| `t` | Tilt test — pure-P control to verify motor direction |
 | `m` | Motor test (forward/reverse at PWM 60) |
 | `p` | Print current state |
 
-## Serial Output (Balance Mode)
+In balance mode the firmware streams tab-separated telemetry at 50 Hz suitable for the Arduino Serial Plotter:
 
-Tab-separated at 50 Hz:
 ```
 theta(deg)    cart_pos(mm)    motor_cmd(PWM)    theta_dot(rad/s)
 ```
@@ -101,17 +126,33 @@ pio run -t upload    # flash
 pio device monitor   # serial monitor (115200 baud)
 ```
 
-## Tuning Guide
+## Bring-up & Tuning
 
-1. Run tilt test (`t`) — motor should push cart **toward** the tilt
-2. If direction is wrong, flip `MOTOR_DIR` to `-1` in `config.h`
-3. Start with K3=0, K4=0, KI=0 — get angle balancing first
-4. Increase K1 if pendulum falls too easily
-5. Increase K2 if it oscillates rapidly
-6. Add K3 for cart centering (start ~0.5, increase until drift stops)
-7. Add KI to eliminate steady-state cart drift
-8. Add K4 to damp cart oscillation when returning to center
+1. **Verify encoders** (`d`). Rotate each encoder by hand and confirm both counts move and pin states toggle. If A and B never both change, you have a wiring issue.
+2. **Tilt test** (`t`). Tilt the pendulum slowly by hand; the motor should push the cart **toward** the tilt. If it pushes away, flip `MOTOR_DIR` to `-1` in `config.h`.
+3. **Angle-only first.** Set `K3 = K4 = KI = 0` and tune K1, K2 until the pendulum balances on its own (the cart will drift).
+   - Increase K1 if the rod falls easily.
+   - Increase K2 if it oscillates rapidly.
+4. **Add cart centering.** Bring K3 up from ~0.5 until cart drift stops, then add KI to eliminate steady-state offset, and finally K4 to damp the return-to-center motion.
 
 ## Status
 
-The angle controller successfully keeps the pendulum within ±2° of vertical. Cart centering via integral action is functional but requires sufficient cart travel (~±50mm minimum) for the integral to converge before hitting rail limits.
+Angle stabilization holds the rod within ±2° of vertical. Cart centering via the integral term works but needs at least ±50 mm of travel for the integral to converge before the rail-limit ESTOP triggers — useful range, not a hard constraint.
+
+## Project Structure
+
+```
+include/
+  config.h          # pins, physical constants, gains, limits
+  controller.h      # LQR + state machine API
+  motor.h           # H-bridge API
+src/
+  main.cpp          # 200 Hz loop, serial CLI, state machine
+  controller.cpp    # lqr_balance() + integral, in_balance_region()
+  motor.cpp         # motor_set/brake/coast with deadband + boost
+platformio.ini      # Arduino Mega 2560, paulstoffregen/Encoder
+```
+
+## License
+
+MIT.
